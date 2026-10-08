@@ -48,6 +48,7 @@ jobs:
           mv artifacts/SideStoreApp.framework/SideStore.dylib artifacts/SideStoreApp.framework/SideStore
           ldid -S artifacts/SideStoreApp.framework/SideStore
           cd artifacts
+          rm -f SideStoreApp-zh.zip SHA256.txt
           zip -qry SideStoreApp-zh.zip SideStoreApp.framework
           shasum -a 256 SideStoreApp-zh.zip > SHA256.txt
       - name: Upload framework
