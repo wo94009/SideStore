@@ -1,0 +1,69 @@
+name: Chinese Settings Build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: maxim-lobanov/setup-xcode@v1.6.0
+        with:
+          xcode-version: '26.4'
+      - name: Apply Chinese settings changes
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          path = pathlib.Path('.github/translations.json')
+          catalog = json.loads(path.read_text())
+          extra = json.loads(pathlib.Path('.github/workflows/settings-extra.json').read_text())
+          catalog['translations'].update(extra)
+          path.write_text(json.dumps(catalog, ensure_ascii=False))
+          PY
+          python3 .github/apply_localization.py .
+      - name: Parse modified Swift files
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          for row in json.load(open('localization-report.json')):
+              subprocess.run(['xcrun', 'swiftc', '-frontend', '-parse', row['file']], check=True)
+          PY
+      - name: Install build tools
+        run: brew install ldid
+      - name: Build SideStore
+        run: |
+          set -o pipefail
+          make build fakesign 2>&1 | tee build.log
+      - name: Prepare embedded framework
+        run: |
+          mkdir -p artifacts
+          cp -R SideStore.xcarchive/Products/Applications/SideStore.app artifacts/SideStoreApp.framework
+          curl -fL --retry 3 https://github.com/LiveContainer/dylibify/releases/download/1.0/dylibify -o dylibify
+          chmod +x dylibify
+          ./dylibify artifacts/SideStoreApp.framework/SideStore artifacts/SideStoreApp.framework/SideStore.dylib
+          mv artifacts/SideStoreApp.framework/SideStore.dylib artifacts/SideStoreApp.framework/SideStore
+          ldid -S artifacts/SideStoreApp.framework/SideStore
+          cd artifacts
+          zip -qry SideStoreApp-zh.zip SideStoreApp.framework
+          shasum -a 256 SideStoreApp-zh.zip > SHA256.txt
+      - name: Upload framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: SideStore-Chinese-Settings
+          path: |
+            artifacts/SideStoreApp-zh.zip
+            artifacts/SHA256.txt
+          if-no-files-found: error
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chinese-Settings-Diagnostics
+          path: |
+            build.log
+            localization-report.json
+            localization.patch
