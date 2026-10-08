@@ -79,6 +79,7 @@ PRESENTATION = {
 
 def patch_text(text):
     mask = code_mask(text)
+    localized_keys = set(re.findall(r'\b(\w+)\s*:\s*LocalizedStringKey\b', mask))
     edits = []
     for match in re.finditer(r'\bText\s*\(', mask):
         start = match.end()
@@ -96,7 +97,7 @@ def patch_text(text):
                 depth -= 1
             elif char == ',' and depth == 0:
                 multi = True
-        if multi or expression.startswith(('verbatim:', 'LocalizedStringKey(', '.init(')):
+        if multi or expression in localized_keys or expression.startswith(('verbatim:', 'LocalizedStringKey(', '.init(')):
             continue
         selected = expression.startswith('"') or expression in PRESENTATION
         if '?' in expression and '"' in expression:
